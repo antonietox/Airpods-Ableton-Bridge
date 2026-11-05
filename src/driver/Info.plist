@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.rapsodica.AirPodsBridge</string>
+<key>CFBundleExecutable</key><string>AirPodsBridge</string>
+<key>CFBundleName</key><string>AirPodsBridge</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+<key>CFBundleVersion</key><string>1.0</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFPlugInFactories</key><dict><key>7E4A1C2B-5D3F-4B8E-9A61-2C7F0E8D4B13</key><string>AirPodsBridge_Create</string></dict>
+<key>CFPlugInTypes</key><dict><key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key><array><string>7E4A1C2B-5D3F-4B8E-9A61-2C7F0E8D4B13</string></array></dict>
+</dict></plist>
