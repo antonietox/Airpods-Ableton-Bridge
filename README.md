@@ -2,14 +2,12 @@
 
 Run Ableton Live (or any DAW) at **1024 / 2048 samples** while listening on AirPods.
 
-Made for mixing on the road: AirPods plus a headphone room-emulation plugin (e.g. Acustica Sienna)
-is a surprisingly effective travel setup — until a heavy session on an older Mac starts popping
-because the buffer can't go above 512.
+AirPods plus a room-emulation plugin is a surprisingly effective travel setup, until a heavy session
+starts popping because the buffer can't go above 512.
 
-Recent macOS versions cap the AirPods output buffer at **960 frames**, so DAWs stop at 512 —
-not enough for heavy projects. Aggregate devices inherit the same cap.
+Recent macOS versions cap the AirPods output buffer at **960 frames**, so DAWs stop at 512.
 
-AirPods Bridge fixes it natively, without BlackHole or Soundflower:
+AirPods Bridge fixes it natively:
 
 ```
 DAW (any buffer, 64–2048+) → "AirPods Bridge" virtual device → forwarder → AirPods (≤ 960)
@@ -19,11 +17,11 @@ DAW (any buffer, 64–2048+) → "AirPods Bridge" virtual device → forwarder �
 - **Forwarder**: a small background app that feeds the AirPods, with clock-drift correction.
   It only holds the AirPods while audio is flowing and releases them after 60 s of silence,
   so they stay free for your phone and calls.
-- **Bonus**: an incoming call no longer crashes your DAW's audio — its device never disappears.
+- **Bonus**: an incoming call no longer crashes your DAW's audio.
 
 ## Install
 
-Requires the Xcode Command Line Tools (`xcode-select --install`).
+Needs the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
 git clone https://github.com/antonietox/Airpods-Ableton-Bridge.git
@@ -31,29 +29,28 @@ cd Airpods-Ableton-Bridge
 ./scripts/install.sh
 ```
 
-The installer asks for your password (to install the audio device) and shows a
-**microphone permission** popup — click Allow. macOS treats every audio input as a mic;
-nothing records your actual microphone.
+The installer asks for your password once, then shows a microphone popup: click Allow.
+macOS treats any audio input as a mic; your real microphone is never touched.
 
-Then in your DAW: **Output → AirPods Bridge**, **Input → No device** (or your usual mic),
-and choose any buffer size.
+Then in your DAW: **Output → AirPods Bridge**, pick your buffer, play.
 
-## Notes
+## Good to know
 
-- Works with any AirPods (the forwarder picks the first output device with "AirPods" in its name).
-- Bluetooth adds its own ~150–250 ms delay — great for playback and mixing, not for tracking.
-- During a call the AirPods switch to headset mode; the forwarder steps aside and resumes afterwards.
-- Tested on an Intel Mac with macOS 15 (Sequoia) and AirPods Pro. Builds universal; Apple Silicon reports welcome.
+- AirPods only, for now: the forwarder looks for an output device with "AirPods" in its name.
+- It runs at 48 kHz, so your DAW will too. Same rate the AirPods use anyway.
+- The orange mic dot only shows while your DAW is playing into the Bridge with AirPods connected.
+- The Bridge never becomes your Mac's default input or output on its own. You pick it in your DAW.
+- Bluetooth still adds its own ~150–250 ms delay: great for playback and mixing, not for tracking.
+- Tested on an Intel Mac, macOS 15, AirPods Pro. Builds universal; Apple Silicon reports welcome.
 - Log: `~/Library/Logs/AirPodsBridge.log`
 
 ## Alternatives
 
-- [Proxy Audio Device](https://github.com/briankendall/proxy-audio-device) — a general-purpose
-  virtual device that forwards all output to another device, with a configurable buffer.
-  Same core idea, done inside the driver (no separate app or mic permission), and available
-  via Homebrew. AirPods Bridge is narrower: built for AirPods + DAW, it frees the AirPods when
-  idle, steps aside during calls and corrects clock drift between the two devices.
-- BlackHole / Soundflower + a routing app — works for some, but more moving parts.
+- [Proxy Audio Device](https://github.com/briankendall/proxy-audio-device): a general-purpose virtual
+  device that forwards all output to another device, with a configurable buffer. Same core idea,
+  done inside the driver. AirPods Bridge is narrower: built for AirPods + DAW, it frees the AirPods
+  when idle, steps aside during calls and corrects clock drift.
+- BlackHole / Soundflower + a routing app: works for some, more moving parts.
 
 ## Uninstall
 

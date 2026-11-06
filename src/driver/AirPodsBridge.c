@@ -89,7 +89,7 @@ static OSStatus GetData(AudioServerPlugInDriverRef d, AudioObjectID obj, pid_t p
       case kAudioObjectPropertyBaseClass: PUT(AudioClassID, kAudioObjectClassID);
       case kAudioObjectPropertyClass: PUT(AudioClassID, kAudioPlugInClassID);
       case kAudioObjectPropertyOwner: PUT(AudioObjectID, kAudioObjectUnknown);
-      case kAudioObjectPropertyManufacturer: PUT(CFStringRef, CFSTR("RAPSODICA"));
+      case kAudioObjectPropertyManufacturer: PUT(CFStringRef, CFSTR("Minki Winki"));
       case kAudioObjectPropertyOwnedObjects:
       case kAudioPlugInPropertyDeviceList: { AudioObjectID i = kObj_Device; return PutIDs(&i, 1, sz, outSz, out); }
       case kAudioPlugInPropertyTranslateUIDToDevice: {
@@ -103,7 +103,7 @@ static OSStatus GetData(AudioServerPlugInDriverRef d, AudioObjectID obj, pid_t p
       case kAudioObjectPropertyClass: PUT(AudioClassID, kAudioDeviceClassID);
       case kAudioObjectPropertyOwner: PUT(AudioObjectID, kObj_PlugIn);
       case kAudioObjectPropertyName: PUT(CFStringRef, CFSTR("AirPods Bridge"));
-      case kAudioObjectPropertyManufacturer: PUT(CFStringRef, CFSTR("RAPSODICA"));
+      case kAudioObjectPropertyManufacturer: PUT(CFStringRef, CFSTR("Minki Winki"));
       case kAudioDevicePropertyDeviceUID: PUT(CFStringRef, CFSTR(kDevUID));
       case kAudioDevicePropertyModelUID: PUT(CFStringRef, CFSTR("AirPodsBridge_Model"));
       case kAudioObjectPropertyOwnedObjects:
@@ -118,7 +118,7 @@ static OSStatus GetData(AudioServerPlugInDriverRef d, AudioObjectID obj, pid_t p
       case kAudioDevicePropertyClockDomain: PUT(UInt32, 0);
       case kAudioDevicePropertyDeviceIsAlive: PUT(UInt32, 1);
       case kAudioDevicePropertyDeviceIsRunning: PUT(UInt32, gIOCount > 0 ? 1 : 0);
-      case kAudioDevicePropertyDeviceCanBeDefaultDevice: PUT(UInt32, 1);
+      case kAudioDevicePropertyDeviceCanBeDefaultDevice: PUT(UInt32, 0);   // never auto-picked as system default (in or out)
       case kAudioDevicePropertyDeviceCanBeDefaultSystemDevice: PUT(UInt32, 0);
       case kAudioDevicePropertyLatency: PUT(UInt32, 0);
       case kAudioDevicePropertySafetyOffset: PUT(UInt32, 0);

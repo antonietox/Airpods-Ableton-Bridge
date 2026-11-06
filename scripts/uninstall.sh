@@ -1,6 +1,6 @@
 #!/bin/bash
 # Removes AirPods Bridge completely.
-LABEL=com.rapsodica.airpodsbridge
+LABEL=com.minkiwinki.airpodsbridge
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
 rm -f "$HOME/Library/LaunchAgents/$LABEL.plist"
 rm -rf "$HOME/Applications/AirPods Bridge.app"

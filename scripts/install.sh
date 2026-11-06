@@ -2,7 +2,7 @@
 # Builds and installs AirPods Bridge: the virtual audio device + the forwarder that starts at login.
 set -e
 cd "$(dirname "$0")/.."
-LABEL=com.rapsodica.airpodsbridge
+LABEL=com.minkiwinki.airpodsbridge
 APPDIR="$HOME/Applications"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
@@ -25,7 +25,7 @@ cp -R "build/AirPods Bridge.app" "$APPDIR/"
 echo "==> Asking for audio-input permission"
 echo "    macOS treats every audio input as a microphone. Click ALLOW on the popup."
 echo "    (No popup? System Settings > Privacy & Security > Microphone > enable AirPods Bridge.)"
-open -n "$APPDIR/AirPods Bridge.app" --args 20
+open -n "$APPDIR/AirPods Bridge.app" --args permit
 read -r -p "    Press Enter once you've allowed it... "
 
 echo "==> Starting the forwarder at login"
