@@ -2,9 +2,7 @@
 # Builds and installs AirPods Bridge: the virtual audio device + the forwarder that starts at login.
 set -e
 cd "$(dirname "$0")/.."
-LABEL=com.minkiwinki.airpodsbridge
 APPDIR="$HOME/Applications"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 echo "==> Building"
 make clean all >/dev/null
@@ -17,8 +15,8 @@ sudo killall coreaudiod
 sleep 3
 
 echo "==> Installing the forwarder app to $APPDIR"
-mkdir -p "$APPDIR" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
-launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+mkdir -p "$APPDIR" "$HOME/Library/Logs"
+pkill -x apbfwd 2>/dev/null || true
 rm -rf "$APPDIR/AirPods Bridge.app"
 cp -R "build/AirPods Bridge.app" "$APPDIR/"
 
@@ -28,24 +26,12 @@ echo "    (No popup? System Settings > Privacy & Security > Microphone > enable 
 open -n "$APPDIR/AirPods Bridge.app" --args permit
 read -r -p "    Press Enter once you've allowed it... "
 
-echo "==> Starting the forwarder at login"
-cat > "$PLIST" <<PL
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key><string>$LABEL</string>
-<key>ProgramArguments</key><array><string>$APPDIR/AirPods Bridge.app/Contents/MacOS/apbfwd</string></array>
-<key>RunAtLoad</key><true/>
-<key>KeepAlive</key><true/>
-<key>ThrottleInterval</key><integer>10</integer>
-<key>ProcessType</key><string>Interactive</string>
-<key>StandardOutPath</key><string>$HOME/Library/Logs/AirPodsBridge.log</string>
-<key>StandardErrorPath</key><string>$HOME/Library/Logs/AirPodsBridge.log</string>
-</dict></plist>
-PL
-pkill -x apbfwd 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST"
+echo "==> Starting AirPods Bridge at login (Login Items)"
+osascript -e 'tell application "System Events" to delete (every login item whose name is "AirPods Bridge")' >/dev/null 2>&1 || true
+osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$APPDIR/AirPods Bridge.app\", hidden:true}" >/dev/null
+pkill -x apbfwd 2>/dev/null || true; sleep 1
+open -a "$APPDIR/AirPods Bridge.app"
 
 echo
-echo "Done. In your DAW, set the audio output to 'AirPods Bridge' and pick any buffer size."
+echo "Done. Look for the headphones icon in your menu bar. In your DAW, set the audio output to 'AirPods Bridge' and pick any buffer size."
 echo "Tip: also set System Settings > Sound > Input back to your usual microphone."

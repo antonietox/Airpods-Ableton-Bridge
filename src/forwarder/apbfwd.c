@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <math.h>
 #include <time.h>
+#include <fcntl.h>
+#include <sys/file.h>
 
 #define RB 32768
 #define BRIDGE_UID "AirPodsBridge_UID"
@@ -22,6 +24,17 @@ static int gPrimed = 0;
 static _Atomic int gUnder = 0, gOver = 0, gSkip = 0, gDup = 0;
 static _Atomic float gPeak = 0;
 static volatile sig_atomic_t gQuit = 0;
+volatile int gUIState = 0;      // 0 idle, 1 DAW using the bridge, 2 forwarding (read by the menu bar UI)
+char gUIDevice[256] = "";       // connected Bluetooth headphones, "" if none
+// Single instance + log file. Idempotent so the menu bar app can call it before starting the UI.
+int apb_setup(int logToFile) {
+  static int done = 0; if (done) return 1;
+  int lf = open("/tmp/com.minkiwinki.airpodsbridge.lock", O_CREAT | O_RDWR, 0644);
+  if (lf < 0 || flock(lf, LOCK_EX | LOCK_NB)) { printf("already running\n"); return 0; }
+  const char* home = getenv("HOME"); char lp[1024];
+  if (home && logToFile) { snprintf(lp, sizeof lp, "%s/Library/Logs/AirPodsBridge.log", home); freopen(lp, "a", stdout); freopen(lp, "a", stderr); setvbuf(stdout, NULL, _IOLBF, 0); }
+  done = 1; return 1;
+}
 static void onSig(int s) { (void)s; gQuit = 1; }
 
 static OSStatus getProp(AudioObjectID id, AudioObjectPropertySelector s, AudioObjectPropertyScope sc, UInt32 size, void* out) {
@@ -44,7 +57,7 @@ static int cfstr(AudioObjectID id, AudioObjectPropertySelector sel, char* buf, i
 static double rate(AudioObjectID id) { Float64 r = 0; getProp(id, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, sizeof r, &r); return r; }
 static int alive(AudioObjectID id) { UInt32 v = 0; return getProp(id, kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal, sizeof v, &v) == 0 && v; }
 
-// mode 0: bridge by UID; mode 1: first output device whose name contains "AirPods"
+// mode 0: bridge by UID; mode 1: first Bluetooth output device (AirPods or other headphones)
 static AudioObjectID findDev(int mode, char* nameOut) {
   AudioObjectPropertyAddress a = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
   UInt32 sz = 0; AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &a, 0, NULL, &sz);
@@ -53,8 +66,12 @@ static AudioObjectID findDev(int mode, char* nameOut) {
   for (int i = 0; i < n; i++) {
     char buf[256];
     if (mode == 0) { cfstr(ids[i], kAudioDevicePropertyDeviceUID, buf, sizeof buf); if (!strcmp(buf, BRIDGE_UID)) return ids[i]; }
-    else { cfstr(ids[i], kAudioObjectPropertyName, buf, sizeof buf);
-      if (strstr(buf, "AirPods") && streamCount(ids[i], kAudioObjectPropertyScopeOutput) > 0) { if (nameOut) strcpy(nameOut, buf); return ids[i]; } }
+    else {   // a Bluetooth headphone output, never the bridge itself
+      cfstr(ids[i], kAudioDevicePropertyDeviceUID, buf, sizeof buf); if (!strcmp(buf, BRIDGE_UID)) continue;
+      UInt32 tt = 0; getProp(ids[i], kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal, sizeof tt, &tt);
+      if (tt != kAudioDeviceTransportTypeBluetooth && tt != kAudioDeviceTransportTypeBluetoothLE) continue;
+      if (streamCount(ids[i], kAudioObjectPropertyScopeOutput) <= 0) continue;
+      cfstr(ids[i], kAudioObjectPropertyName, buf, sizeof buf); if (nameOut) strcpy(nameOut, buf); return ids[i]; }
   }
   return kAudioObjectUnknown;
 }
@@ -134,7 +151,11 @@ static OSStatus toneProc(AudioObjectID d, const AudioTimeStamp* now, const Audio
   return 0;
 }
 
+#ifdef APB_GUI
+int fwd_main(int argc, char** argv) {
+#else
 int main(int argc, char** argv) {
+#endif
   signal(SIGINT, onSig); signal(SIGTERM, onSig); setvbuf(stdout, NULL, _IOLBF, 0);
   if (argc > 1 && !strcmp(argv[1], "permit")) {   // open the bridge input briefly so macOS asks for permission
     AudioObjectID br = findDev(0, NULL); if (!br) { printf("bridge not found\n"); return 1; }
@@ -143,6 +164,8 @@ int main(int argc, char** argv) {
     AudioDeviceStop(br, id); AudioDeviceDestroyIOProcID(br, id); return 0;
   }
   int tone = argc > 1 && !strcmp(argv[1], "tone");
+  if (!tone && !apb_setup(argc == 1)) return 0;
+
   int secs = argc > 1 + tone ? atoi(argv[1 + tone]) : 0;
   time_t t0 = time(NULL);
   if (tone) {
@@ -155,7 +178,7 @@ int main(int argc, char** argv) {
   // Bridge input is opened only while another app plays into it AND AirPods are connected,
   // so macOS shows no microphone indicator the rest of the time.
   AudioObjectID br = 0, ap = 0; AudioDeviceIOProcID brID = NULL, apID = NULL; char apName[256] = "";
-  time_t lastSig = 0, lastCheck = 0; int brOpen = 0;
+  time_t lastCheck = 0; int brOpen = 0;
   #define LOG(...) do { time_t _t = time(NULL); char _b[32]; strftime(_b, sizeof _b, "%F %T", localtime(&_t)); printf("%s ", _b); printf(__VA_ARGS__); } while (0)
   #define CLOSE_AP(why) do { AudioDeviceStop(ap, apID); AudioDeviceDestroyIOProcID(ap, apID); ap = 0; \
     LOG("AirPods released (%s) under %d skip %d dup %d\n", why, atomic_load(&gUnder), atomic_load(&gSkip), atomic_load(&gDup)); } while (0)
@@ -165,24 +188,25 @@ int main(int argc, char** argv) {
       lastCheck = now;
       if (!br || !alive(br)) { if (brOpen) { AudioDeviceStop(br, brID); AudioDeviceDestroyIOProcID(br, brID); brOpen = 0; } br = findDev(0, NULL); }
       AudioObjectID c = findDev(1, apName);
+      if (c) { strncpy(gUIDevice, apName, sizeof gUIDevice - 1); } else gUIDevice[0] = 0;
       int podsReady = c && rate(c) == 48000.0;
       int want = br && podsReady && otherAppUsing(br);
       if (want && !brOpen) { setU32(br, kAudioDevicePropertyBufferFrameSize, 256);
-        AudioDeviceCreateIOProcID(br, inProc, NULL, &brID); AudioDeviceStart(br, brID); brOpen = 1; lastSig = 0; LOG("bridge in use, listening\n"); }
+        AudioDeviceCreateIOProcID(br, inProc, NULL, &brID); AudioDeviceStart(br, brID); brOpen = 1; LOG("bridge in use, listening\n"); }
       if (!want && brOpen) { if (ap) CLOSE_AP("bridge idle or AirPods gone");
         AudioDeviceStop(br, brID); AudioDeviceDestroyIOProcID(br, brID); brOpen = 0; LOG("bridge closed\n"); }
       if (ap && (!alive(ap) || rate(ap) != 48000.0)) CLOSE_AP("gone or call mode");
     }
-    float pk = atomic_exchange(&gPeak, 0.0f);
-    if (pk > 1e-5f) lastSig = now;
-    int wanted = brOpen && lastSig && now - lastSig < 60;
-    if (ap && !wanted) CLOSE_AP("60 s silence");
+    // Hold the headphones for as long as a DAW plays into the bridge (bridge is only open then).
+    int wanted = brOpen;
     if (!ap && wanted) { AudioObjectID c = findDev(1, apName);
       if (c && rate(c) == 48000.0) { ap = c; setU32(ap, kAudioDevicePropertyBufferFrameSize, 512);
         gPrimed = 0; atomic_store(&gR, atomic_load(&gW));
         AudioDeviceCreateIOProcID(ap, outProc, NULL, &apID); AudioDeviceStart(ap, apID); LOG("forwarding to %s\n", apName); } }
+    gUIState = ap ? 2 : (brOpen ? 1 : 0);
     usleep(50000);
   }
+  gUIState = 0;
   if (ap) { AudioDeviceStop(ap, apID); AudioDeviceDestroyIOProcID(ap, apID); }
   if (brOpen) { AudioDeviceStop(br, brID); AudioDeviceDestroyIOProcID(br, brID); }
   printf("stopped (under %d skip %d dup %d)\n", atomic_load(&gUnder), atomic_load(&gSkip), atomic_load(&gDup)); return 0;

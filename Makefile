@@ -15,7 +15,7 @@ driver:
 app:
 	mkdir -p "$(APP)/Contents/MacOS"
 	cp src/forwarder/Info.plist "$(APP)/Contents/"
-	clang $(CFLAGS) -o "$(APP)/Contents/MacOS/apbfwd" src/forwarder/apbfwd.c $(LIBS)
+	clang $(CFLAGS) -DAPB_GUI -fobjc-arc -o "$(APP)/Contents/MacOS/apbfwd" src/forwarder/apbfwd.c src/forwarder/menubar.m $(LIBS) -framework Cocoa
 	codesign --force -s - "$(APP)"
 
 clean:

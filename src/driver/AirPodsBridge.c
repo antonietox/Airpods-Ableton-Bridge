@@ -17,6 +17,7 @@ static UInt64 gIOCount = 0, gAnchor = 0, gNumTS = 0;
 static Float64 gTicksPerFrame = 0;
 static float gRing[kRing * kCh];
 static UInt32 gInActive = 1, gOutActive = 1;
+static volatile Float64 gLastWriteEnd = -1;   // sample time just after the newest written frame
 
 static HRESULT QI(void*, REFIID, LPVOID*);
 static ULONG AddRef(void*); static ULONG Release(void*);
@@ -185,7 +186,7 @@ static OSStatus SetData(AudioServerPlugInDriverRef d, AudioObjectID obj, pid_t p
 }
 static OSStatus StartIO(AudioServerPlugInDriverRef d, AudioObjectID o, UInt32 c) {
   pthread_mutex_lock(&gMutex);
-  if (gIOCount == 0) { gNumTS = 0; gAnchor = mach_absolute_time(); memset(gRing, 0, sizeof gRing); }
+  if (gIOCount == 0) { gNumTS = 0; gAnchor = mach_absolute_time(); memset(gRing, 0, sizeof gRing); gLastWriteEnd = -1; }
   gIOCount++; pthread_mutex_unlock(&gMutex); return 0;
 }
 static OSStatus StopIO(AudioServerPlugInDriverRef d, AudioObjectID o, UInt32 c) {
@@ -207,19 +208,25 @@ static OSStatus WillDo(AudioServerPlugInDriverRef d, AudioObjectID o, UInt32 c, 
 }
 static OSStatus BeginIO(AudioServerPlugInDriverRef d, AudioObjectID o, UInt32 c, UInt32 op, UInt32 n, const AudioServerPlugInIOCycleInfo* i) { return 0; }
 static OSStatus EndIO(AudioServerPlugInDriverRef d, AudioObjectID o, UInt32 c, UInt32 op, UInt32 n, const AudioServerPlugInIOCycleInfo* i) { return 0; }
-static void RingCopy(float* buf, Float64 sampleTime, UInt32 frames, int write) {
+static void RingWrite(const float* buf, Float64 sampleTime, UInt32 frames) {
   if (sampleTime < 0) sampleTime = 0;
-  UInt32 pos = (UInt32)((UInt64)sampleTime % kRing);
-  UInt32 first = frames; if (pos + first > kRing) first = kRing - pos;
-  float* r = gRing + pos * kCh; size_t b1 = first * kCh * sizeof(float);
-  if (write) memcpy(r, buf, b1); else { memcpy(buf, r, b1); memset(r, 0, b1); }
-  if (frames > first) { size_t b2 = (frames - first) * kCh * sizeof(float);
-    if (write) memcpy(gRing, buf + first * kCh, b2); else { memcpy(buf + first * kCh, gRing, b2); memset(gRing, 0, b2); } }
+  UInt64 t0 = (UInt64)sampleTime;
+  for (UInt32 i = 0; i < frames; i++) { UInt32 p = (UInt32)((t0 + i) % kRing); gRing[p * kCh] = buf[i * kCh]; gRing[p * kCh + 1] = buf[i * kCh + 1]; }
+  gLastWriteEnd = sampleTime + frames;
+}
+// Non-destructive read: any number of readers can read; frames not written recently read as silence.
+static void RingRead(float* buf, Float64 sampleTime, UInt32 frames) {
+  Float64 hi = gLastWriteEnd, lo = hi - (kRing - 2048);
+  for (UInt32 i = 0; i < frames; i++) {
+    Float64 t = sampleTime + i;
+    if (hi > 0 && t >= 0 && t < hi && t >= lo) { UInt32 p = (UInt32)((UInt64)t % kRing); buf[i * kCh] = gRing[p * kCh]; buf[i * kCh + 1] = gRing[p * kCh + 1]; }
+    else { buf[i * kCh] = 0; buf[i * kCh + 1] = 0; }
+  }
 }
 static OSStatus DoIO(AudioServerPlugInDriverRef d, AudioObjectID dev, AudioObjectID stream, UInt32 c, UInt32 op, UInt32 n,
                      const AudioServerPlugInIOCycleInfo* info, void* main, void* sec) {
   if (n > kRing) n = kRing;
-  if (op == kAudioServerPlugInIOOperationWriteMix && stream == kObj_Out) RingCopy(main, info->mOutputTime.mSampleTime, n, 1);
-  else if (op == kAudioServerPlugInIOOperationReadInput && stream == kObj_In) RingCopy(main, info->mInputTime.mSampleTime, n, 0);
+  if (op == kAudioServerPlugInIOOperationWriteMix && stream == kObj_Out) RingWrite(main, info->mOutputTime.mSampleTime, n);
+  else if (op == kAudioServerPlugInIOOperationReadInput && stream == kObj_In) RingRead(main, info->mInputTime.mSampleTime, n);
   return 0;
 }

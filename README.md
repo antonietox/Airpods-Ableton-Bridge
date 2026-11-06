@@ -15,8 +15,9 @@ DAW (any buffer, 64–2048+) → "AirPods Bridge" virtual device → forwarder �
 
 - **Virtual device**: a tiny 2-channel, 48 kHz loopback CoreAudio driver (AudioServerPlugIn).
 - **Forwarder**: a small background app that feeds the AirPods, with clock-drift correction.
-  It only holds the AirPods while audio is flowing and releases them after 60 s of silence,
-  so they stay free for your phone and calls.
+  It only holds the AirPods while your DAW is playing into the Bridge, and frees them the moment
+  you close the DAW or switch its output, so they stay free for your phone and calls.
+- **Menu bar icon**: shows whether it's idle, waiting for your DAW, or forwarding, and to which headphones.
 - **Bonus**: an incoming call no longer crashes your DAW's audio.
 
 ## Install
@@ -33,10 +34,11 @@ The installer asks for your password once, then shows a microphone popup: click 
 macOS treats any audio input as a mic; your real microphone is never touched.
 
 Then in your DAW: **Output → AirPods Bridge**, pick your buffer, play.
+It starts by itself at login (System Settings → General → Login Items); nothing to open by hand.
 
 ## Good to know
 
-- AirPods only, for now: the forwarder looks for an output device with "AirPods" in its name.
+- Works with AirPods and other Bluetooth headphones: the forwarder picks the connected Bluetooth output.
 - It runs at 48 kHz, so your DAW will too. Same rate the AirPods use anyway.
 - The orange mic dot only shows while your DAW is playing into the Bridge with AirPods connected.
 - The Bridge never becomes your Mac's default input or output on its own. You pick it in your DAW.
